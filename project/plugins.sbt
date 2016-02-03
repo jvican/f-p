@@ -12,4 +12,4 @@ addSbtPlugin("org.scalariform" % "sbt-scalariform" % "1.6.1")
 // Eclipse integration
 // Required to mix in trait `Eclipse` located at `eclipse.scala`.
 // Currently disabled by default.
-//addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "4.0.0")
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "4.0.0")
