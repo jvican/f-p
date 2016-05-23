@@ -1,14 +1,12 @@
 package fp
-package test
 
 import fp.backend.netty.SiloSystem
+import org.scalatest.{FlatSpec, Matchers}
 
-import scala.concurrent.{ Await, ExecutionContext, Future, Promise }
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import ExecutionContext.Implicits.global
-import scala.util.{ Try, Success, Failure }
-
-import org.scalatest.{ FlatSpec, Matchers }
+import scala.concurrent.{Await, ExecutionContext}
+import scala.util.{Failure, Success, Try}
 
 class SiloSystemTest extends FlatSpec with Matchers {
 
