@@ -18,10 +18,6 @@ class SiloSystemTest extends FlatSpec with Matchers {
     initSilo map { _ shouldBe a[SiloSystem] }
   } 
 
-  it should "use the default, Netty-based realization" in {
-    initSilo map { _ shouldBe a[SiloSystem] }
-  } 
-
   it should "throw an exception in case of wrong `silo.system.impl` parameter" in {
     val osp = Option(System.getProperty("silo.system.impl"))
 
@@ -35,8 +31,8 @@ class SiloSystemTest extends FlatSpec with Matchers {
   }
 
   it should "throw an exception in case of port is already taken" in {
-    val system = Await.result(SiloSystem(Some(8090)), 10.seconds)
-    Try(Await.result(SiloSystem(Some(8090)), 10.seconds)) match {
+    val system = Await.result(SiloSystem(Some(9999)), 10.seconds)
+    Try(Await.result(SiloSystem(Some(9999)), 10.seconds)) match {
       case Success(s) =>
         Await.result(s.terminate(), 10.seconds)
         true shouldBe false 
