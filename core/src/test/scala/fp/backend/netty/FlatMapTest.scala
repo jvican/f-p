@@ -11,14 +11,14 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.spores._
 
-class MapTest extends FpSpec {
+class FlatMapTest extends FpSpec {
 
   import PicklingProtocol._
 
   implicit val master = bootReadyClient
   val worker = bootReadyServer.asInstanceOf[SiloSystem with NettyServer]
 
-  "Map" should "work over a silo" in {
+  "Flatmap" should "should work over a Silo" in {
 
     // Set up the silo in the server
     val silo = new Silo(List("1", "2", "3"))
@@ -31,9 +31,9 @@ class MapTest extends FpSpec {
     // Set up SiloRef
     val sr = new MaterializedSilo[List[String]](dag, serverHost)
 
-    val action: SiloRef[List[Int]] = sr.map(spore {
+    val action: SiloRef[List[Int]] = sr.flatMap(spore {
       (l: List[String]) =>
-        l.map(_.toInt)
+        new Silo(l.map(_.toInt))
     })
 
     whenReady(action.send) {

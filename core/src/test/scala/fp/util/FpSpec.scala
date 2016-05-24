@@ -12,5 +12,5 @@ trait FpSpec
     with BootHelper
     with Assertions
     with ScalaFutures {
-  implicit val patience = PatienceConfig(10.seconds, 1.second)
+  implicit val patience = PatienceConfig(100.seconds, 1.second)
 }
