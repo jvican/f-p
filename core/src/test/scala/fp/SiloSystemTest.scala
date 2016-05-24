@@ -1,7 +1,7 @@
 package fp
 
 import fp.backend.netty.SiloSystem
-import fp.util.BootHelper
+import fp.util.{BootHelper, SimpleFpSpec}
 import org.scalatest.{Assertions, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -9,17 +9,13 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
 
-class SiloSystemTest
-    extends FlatSpec
-    with Matchers
-    with BootHelper
-    with Assertions {
+class SiloSystemTest extends SimpleFpSpec {
 
-  "Instantiation" should "yield a default silo system" in {
+  "Instantiation of a SiloSystem" should "yield a new one" in {
     bootClient map { _ shouldBe a[SiloSystem] }
   }
 
-  it should "throw an exception in case of wrong `silo.system.impl` parameter" in {
+  it should "throw an exception if `silo.system.impl` param is wrong" in {
     val osp = Option(System.getProperty("silo.system.impl"))
 
     System.setProperty("silo.system.impl", "XXX")
@@ -31,17 +27,15 @@ class SiloSystemTest
     }
   }
 
-  it should "throw an exception when a port is already taken" in {
+  it should "throw an exception if port is already taken" in {
     val system = bootServer
 
-    Try(bootServer) match {
-      case Success(s) =>
-        Await.result(s.map(_.terminate()), 10.seconds)
-        fail("Booting server in the same port should fail")
-      case Failure(e) =>
-        e.getMessage should include ("Address already in use")
+    whenReady(system) { case _ =>
+      intercept[java.net.BindException] {
+        Await.result(bootServer, 5.seconds)
+      }
     }
 
-    Await.result(system.map(_.terminate()), 10.seconds)
+    Await.result(system.map(_.terminate()), 5.seconds)
   }
 }

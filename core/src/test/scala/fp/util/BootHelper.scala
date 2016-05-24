@@ -7,7 +7,7 @@ import org.scalatest.Assertions
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 trait BootHelper {
@@ -19,15 +19,11 @@ trait BootHelper {
     Await.result(bootServer(ec), 10.seconds)
 
   /** Throws assert exception if [[SiloSystem]] is not properly booted up */
-  def bootServer(
-      implicit ec: ExecutionContext): Future[SiloSystem] = {
+  def bootServer(implicit ec: ExecutionContext): Future[SiloSystem] = {
     val p = Promise[SiloSystem]()
     NettySiloSystem(serverHost) onComplete {
       case Success(sys) => p.success(sys)
-      case Failure(err) =>
-        p.failure {
-          fail(s"Failed at booting server: ${err.getMessage}")
-        }
+      case Failure(err) => p.failure(err)
     }
     p.future
   }
@@ -37,7 +33,8 @@ trait BootHelper {
 
   def shutDownSystem(sys: SiloSystem) = sys.terminate()
   def shutDownEverything(client: SiloSystem, server: SiloSystem) = {
-    shutDownSystem(client).flatMap(_ => shutDownSystem(server))
-        .recoverWith{ case t: Throwable => shutDownSystem(server)}
+    shutDownSystem(client).flatMap(_ => shutDownSystem(server)).recoverWith {
+      case t: Throwable => shutDownSystem(server)
+    }
   }
 }

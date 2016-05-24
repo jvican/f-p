@@ -1,10 +1,10 @@
-package fp.model.pickling
+package fp.backend.netty
 
 import fp.backend.SelfDescribing
 import fp.model.Transformed
-import fp.util.FpSpec
+import fp.model.pickling.PicklingProtocol
 
-class TransformedSpec extends FpSpec {
+class TransformedSpec extends ClientFpSpec {
 
   import PicklingProtocol._
   implicit val master = bootReadyClient
@@ -16,7 +16,7 @@ class TransformedSpec extends FpSpec {
   )
 
 
-  it should "be picklable/unpicklable even if static picklers have been used" in {
+  it should "be picklable/unpicklable even if static picklers have been used" in { ctx =>
 
     println((List(1,2,3): Any).pickle.value)
     val m1 = SelfDescribing(confirmation)
