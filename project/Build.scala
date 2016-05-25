@@ -21,7 +21,8 @@ object Build extends Build with Mappings {
     resolvers ++= (if (version.value.endsWith("-SNAPSHOT")) List(snapshotsRepo) else Nil),
     parallelExecution in Global := false,
     unmanagedSourceDirectories in Compile <<= (scalaSource in Compile)(Seq(_)),
-    unmanagedSourceDirectories in Test <<= (scalaSource in Test)(Seq(_))
+    unmanagedSourceDirectories in Test <<= (scalaSource in Test)(Seq(_)),
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
   )
 
   lazy val `f-p` = Project(
@@ -51,8 +52,8 @@ object Build extends Build with Mappings {
       Seq(
         name := "f-p core",
         libraryDependencies ++= Seq(
-          "org.scala-lang.modules"     %% "spores-core"     % "0.2.4-M4",
-          "org.scala-lang.modules"     %% "spores-pickling" % "0.2.4-M4",
+          "org.scala-lang.modules"     %% "spores-core"     % "0.3.0-M1",
+          "org.scala-lang.modules"     %% "spores-pickling" % "0.3.0-M1",
           "org.scala-lang.modules"     %% "scala-pickling"  % "0.11.0-M4",
 
           "io.netty"                    % "netty-all"       % "4.1.0.CR1",
