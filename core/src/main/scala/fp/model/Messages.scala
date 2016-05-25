@@ -34,36 +34,59 @@ sealed abstract class Message {
 @directSubclasses(Array(classOf[ClientRequest]))
 sealed abstract class Request extends Message
 
-case class Disconnect(id: MsgId, senderId: SiloSystemId) extends Request
+case class Disconnect(
+    id: MsgId,
+    senderId: SiloSystemId
+) extends Request
 
-case class Terminate(id: MsgId, senderId: SiloSystemId) extends Request
+case class Terminate(
+    id: MsgId,
+    senderId: SiloSystemId
+) extends Request
 
 /** The sender expects a reply from the recipient. */
 sealed trait ExpectsResponse
 
-@directSubclasses(Array(classOf[Populate[_]], classOf[Transform]))
-sealed abstract class ClientRequest extends Request with ExpectsResponse
+@directSubclasses(
+  Array(classOf[Populate[_]],
+  classOf[Transform])
+) sealed abstract class ClientRequest extends Request with ExpectsResponse
 
-case class Populate[T](id: MsgId, senderId: SiloSystemId, gen: SiloGen[T])
-  extends ClientRequest
+case class Populate[T](
+    id: MsgId,
+    senderId: SiloSystemId,
+    gen: SiloGen[T]
+) extends ClientRequest
 
-case class RequestData(id: MsgId, senderId: SiloSystemId,
-                       node: Node) extends ClientRequest
+case class RequestData(
+    id: MsgId,
+    senderId: SiloSystemId,
+    node: Node
+) extends ClientRequest
 
-case class Transform(id: MsgId, senderId: SiloSystemId, node: Node,
-                     picklerClassName: String,
-                     unpicklerClassName: String) extends ClientRequest
+case class Transform(
+    id: MsgId,
+    senderId: SiloSystemId,
+    node: Node
+) extends ClientRequest
 
-@directSubclasses(Array(classOf[Populated], classOf[Transformed[_]]))
-sealed abstract class Response extends Message
+@directSubclasses(
+  Array(classOf[Populated],
+  classOf[Transformed[_]])
+) sealed abstract class Response extends Message
 
-case class Populated(id: MsgId, senderId: SiloSystemId,
-                     node: Materialized) extends Response
+case class Populated(
+    id: MsgId,
+    senderId: SiloSystemId,
+    node: Materialized
+) extends Response
 
 /** Represents a successful transformation over some data of a [[Silo]] that
   * it's sent back to the node that requested it. It's the natural response
   * to a `send` operation since it returns the result of the transformation.
   */
-case class Transformed[T](id: MsgId, senderId: SiloSystemId,
-                          data: T) extends Response
-
+case class Transformed[T](
+    id: MsgId,
+    senderId: SiloSystemId,
+    data: T
+) extends Response

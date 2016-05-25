@@ -98,7 +98,7 @@ class MaterializedSilo[R: FastTypeTag: Pickler: Unpickler]
   override val id = node.refId
 
   override def send: Future[R] = {
-    debug(s"Requesting data of materialized node to host `${id.at}`...")
+    println(s"Requesting data of materialized node to host `${id.at}`...")
     system.request(id.at) { RequestData(_, system.systemId, node) } map {
       case t: Transformed[R] => t.data
       case _ => throw new Exception(s"Computation at `${id.at}` failed.")
@@ -114,13 +114,10 @@ class TransformedSilo[T, S, R: FastTypeTag]
   import scala.concurrent.ExecutionContext.Implicits.global
 
   override def send: Future[R] = {
-    debug(s"Sending graph to host `${id.at}`...")
-
-    val picklerClassName = transformedPicklerUnpickler[R].getClass.getName
-    val unpicklerClassName = picklerClassName
+    println(s"Sending graph to host `${id.at}`...")
 
     system.request(id.at) {
-      Transform(_, system.systemId, node, picklerClassName, unpicklerClassName)
+      Transform(_, system.systemId, node)
     } map {
       case t: Transformed[R] => t.data
       case _ => throw new Exception(s"Computation at `${id.at}` failed.")

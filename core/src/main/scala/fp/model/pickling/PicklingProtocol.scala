@@ -7,10 +7,9 @@ import fp.model._
 import scala.pickling._
 import scala.pickling.internal.HybridRuntime
 import scala.pickling.json.JsonFormats
-import scala.pickling.pickler.AllPicklers
+import scala.pickling.pickler.{AllPicklers, AnyPicklerUnpickler}
 import scala.pickling.AutoRegister
 import scala.spores._
-import fp.debug
 
 abstract class PicklingLogic extends Ops with AllPicklers with JsonFormats
 
@@ -20,15 +19,16 @@ abstract class PicklingLogic extends Ops with AllPicklers with JsonFormats
   * fall back to dynamic generation of picklers.
   */
 object PicklingProtocol extends {
-  //val currentRuntime = new HybridRuntime
-  //val onlyLookup = internal.replaceRuntime(currentRuntime)
+  val currentRuntime = new HybridRuntime
+  val onlyLookup = internal.replaceRuntime(currentRuntime)
 } with PicklingLogic {
 
-  /** Very important, since it solves an optimization issue */
+  /** Very important, optimizes picklers */
   implicit val so = static.StaticOnly
+  implicit val sh = shareNothing.ShareNothing
 
   /* Direct access to the picklers of spores, import to use */
-  val sporesPicklers = SporePickler
+  val sporesPicklers = SporePicklers
   import fp.util.PicklingHelper._
   import sporesPicklers._
 
@@ -44,8 +44,6 @@ object PicklingProtocol extends {
     implicit object TransformedPU extends AbstractPicklerUnpickler[Transformed[T]]
       with AutoRegister[Transformed[T]] {
 
-      val picklerT = p
-      val unpicklerT = u
       override def tag = implicitly[FastTypeTag[Transformed[T]]]
 
       override def pickle(picklee: Transformed[T], builder: PBuilder): Unit = {
@@ -53,7 +51,8 @@ object PicklingProtocol extends {
         builder.beginEntry(picklee, tag)
         writeEliding(builder, "id", picklee.id, msgIdPickler)
         writeEliding(builder, "senderId", picklee.senderId, siloSystemIdPickler)
-        writeEliding(builder, "data", picklee.data, picklerT)
+        /* Important not to elide here, `AnyPicklerUnpickler` needs it */
+        write(builder, "data", picklee.data, p)
         builder.endEntry()
 
       }
@@ -61,7 +60,8 @@ object PicklingProtocol extends {
       override def unpickle(tag: String, reader: PReader): Any = {
         val id = readEliding(reader, "id", msgIdUnpickler)
         val senderId = readEliding(reader, "senderId", siloSystemIdUnpickler)
-        val data = readEliding(reader, "data", unpicklerT)
+        val data = readEliding(reader, "data", u)
+
         Transformed(id, senderId, data)
       }
     }

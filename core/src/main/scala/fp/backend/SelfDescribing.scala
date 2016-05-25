@@ -9,6 +9,8 @@ import PicklingProtocol._
 import fp.util.RuntimeHelper
 import sporesPicklers._
 
+import scala.pickling.pickler.AnyPicklerUnpickler
+
 /** Wrapper useful to allow deserialization of certain cases in which
   * scala-pickling cannot generate pickler/unpicklers for.
   *
@@ -22,7 +24,7 @@ import sporesPicklers._
   * statically unpickle the message. This is a workaround to avoid dynamic
   * deserialization (hint: bad performance) and stick with static picklers.
   */
-case class SelfDescribing(unpicklerClassName: String, blob: String) {
+case class SelfDescribing(key: String, blob: String) {
 
 
   /* All the magic happens here, we get the static pickler and
@@ -37,10 +39,7 @@ case class SelfDescribing(unpicklerClassName: String, blob: String) {
 
     val blobPickle = JSONPickle(blob)
     val reader = pickleFormat.createReader(blobPickle)
-    val unpickler = RuntimeHelper.getInstance[Unpickler[Any]](unpicklerClassName)
-    val tag = unpickler.tag
-
-    unpickler.unpickle(tag.key, reader).asInstanceOf[T]
+    AnyPicklerUnpickler.unpickle(key, reader).asInstanceOf[T]
 
   }
 
@@ -56,7 +55,7 @@ object SelfDescribing {
 
     val unpickler = implicitly[Unpickler[M]]
     val pickled = msg.pickle.value
-    SelfDescribing(unpickler.getClass.getName, pickled)
+    SelfDescribing(unpickler.tag.key, pickled)
 
   }
 

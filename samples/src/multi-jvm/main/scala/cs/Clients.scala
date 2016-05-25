@@ -80,7 +80,9 @@ stationary data, and get typed communication all for free, all in a friendly col
   //val s2 = s.pickle.unpickle[Spore[Unit, Silo[List[String]]]]
   //val mt = s2(())
 
-  val fs: Spore[List[String], List[Int]] = (l: List[String]) => l.map(_.toInt)
+  val fs: Spore[List[String], List[Int]] =
+    (l: List[String]) => l.map(_.toInt)
+  
   val pls = implicitly[Pickler[List[String]]]
   implicitly[Unpickler[List[String]]]
   implicitly[Pickler[List[Int]]]

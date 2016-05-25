@@ -1,6 +1,7 @@
 package fp.util
 
 import scala.pickling._
+import scala.pickling.pickler.AnyPicklerUnpickler
 
 object PicklingHelper {
 
@@ -23,19 +24,23 @@ object PicklingHelper {
   def readTemplate[T](reader: PReader, field: String,
                       unpickler: Unpickler[T], sideEffect: PReader => Unit): T = {
     val reader1 = reader.readField(field)
-    sideEffect(reader1)
-    val tag1 = reader1.beginEntry()
-    val result = unpickler.unpickle(tag1, reader1).asInstanceOf[T]
-    reader1.endEntry()
-    result
+    if(!reader1.atPrimitive) {
+      sideEffect(reader1)
+      val tag1 = reader1.beginEntry()
+      val result = unpickler.unpickle(tag1, reader1).asInstanceOf[T]
+      reader1.endEntry()
+      result
+    } else reader1.readPrimitive().asInstanceOf[T]
   }
 
   def read[T](reader: PReader, field: String, unpickler: Unpickler[T]): T =
     readTemplate(reader, field, unpickler, {r => ()})
 
+  final val anyTag = AnyPicklerUnpickler.tag
   def readEliding[T](reader: PReader, field: String, unpickler: Unpickler[T]): T =
     readTemplate(reader, field, unpickler, {r =>
-      r.hintElidedType(unpickler.tag)
+      if(unpickler.tag != anyTag)
+        r.hintElidedType(unpickler.tag)
     })
 
 }

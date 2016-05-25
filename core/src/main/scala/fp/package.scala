@@ -1,3 +1,5 @@
+import java.net.InetSocketAddress
+
 /**
  * This package, [[fp]], contains ...
  */
@@ -18,7 +20,9 @@ package object fp {
 
   }
 
-  def debug(msg: String) = println(msg)
+  implicit class HostToInetSocketAddress(h: Host) {
+    def toAddress = new InetSocketAddress(h.address, h.port)
+  }
 
 }
 

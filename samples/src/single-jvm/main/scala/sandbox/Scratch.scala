@@ -33,7 +33,7 @@ object SiloSystemClientMode extends AnyRef with App with Logging {
 
   logger.info(s"Silo system `${system.systemId}` up and running.")
   logger.info(s"Initiating termination of silo system `${system.systemId}`...")
-  Await.result(system.terminate(), 10.seconds)
+  Await.result(system.terminate, 10.seconds)
   logger.info(s"Silo system `${system.systemId}` terminated.")
 
 }
@@ -72,7 +72,7 @@ object SiloSystemDualMode extends AnyRef with App with Logging {
 
       // JVM does not terminate if the following call is commented out
       try {
-        Await.result(system.terminate(), 2.seconds)
+        Await.result(system.terminate, 2.seconds)
         logger.info(s"Silo system `${system.systemId}` terminated.")
       } catch {
         case err: Throwable =>
