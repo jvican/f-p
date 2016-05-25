@@ -2,88 +2,105 @@ package fp
 package backend
 package netty
 
-import java.net.InetSocketAddress
-import java.util.concurrent.{ CountDownLatch, LinkedBlockingQueue }
+import java.net.BindException
 
-import com.typesafe.scalalogging.{ StrictLogging => Logging }
-import fp.model.{SiloSystemId, MsgId, Response, Message}
+import fp.model.{Message, SiloSystemId}
+import com.typesafe.scalalogging.{StrictLogging => Logging}
+import java.util.concurrent.{CountDownLatch, FutureTask, LinkedBlockingQueue}
+
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel._
-import io.netty.handler.codec.{LengthFieldBasedFrameDecoder, LengthFieldPrepender}
-import io.netty.handler.logging.{ LogLevel, LoggingHandler => Logger }
-import io.netty.util.concurrent.DefaultEventExecutorGroup
+import io.netty.handler.codec.LengthFieldPrepender
+import io.netty.handler.logging.{LogLevel, LoggingHandler => Logger}
 
-import scala.concurrent.Promise
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future, Promise}
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.ExecutionContext.Implicits.{ global => executor }
-import scala.pickling.Unpickler
+import scala.concurrent.ExecutionContext.Implicits.{global => executor}
 
-private[netty] trait Server extends backend.Server with SiloWarehouse
-  with MessagingLayer[NettyContext] with Sender with Logging {
+private[netty] trait Server
+    extends backend.Server
+    with SiloWarehouse
+    with MessagingLayer[NettyContext]
+    with Sender
+    with Logging {
 
   self: SiloSystem =>
 
   import logger._
 
   /* Promise the server is up and running. */
-  protected def started: Promise[SiloSystem]
+  protected def promiseOfStart: Promise[SiloSystem]
 
   /* Netty server constituents */
   private val server = new ServerBootstrap
   private val bossGrp = new NioEventLoopGroup
   private val wrkrGrp = new NioEventLoopGroup
 
-  /* Latch to prevent server termination before `stop`
-   * has been initiated by the surrounding silo system. */
-  private val latch = new CountDownLatch(1)
+  private val startupLatch = new CountDownLatch(1)
 
-  /** System message processing constituents
-    *
-    *      `forwarder --put-->  mq  <--pop-- receptor`
+  /** System message processing constituents.
     *
     * `receptor` : Worker for all incoming messages from all channels.
     * `forwarder`: Server handler that forwards messages received by Netty.
     */
   private val mq = new LinkedBlockingQueue[NettyWrapper]
-  private val receptor = new Receptor(mq)(ec, this, self)
+  private val receptor = new Receptor(mq, startupLatch)(ec, this, self)
 
   /* Not thread-safe, only accessed in the [[Receptor]].
    * Be careful, [[ConcurrentMap]] could be better than [[TrieMap]] */
   override lazy val statusFrom = initMessagingHub
 
   /* Thread-safe since it's accessed in the handlers */
-  override lazy val unconfirmedResponses = TrieMap.empty[SiloSystemId, SelfDescribing]
+  override lazy val unconfirmedResponses =
+    TrieMap.empty[SiloSystemId, SelfDescribing]
 
   /* Thread-safe since it's accessed in the handlers */
   override lazy val silos = TrieMap.empty[SiloRefId, Silo[_]]
 
-  /* Initialize a [[Netty http://goo.gl/0Z9pZM]]-based server.
-   *
-   * Note: [[NioEventLoopGroup]] is supposed to be used only for non-blocking
-   * actions. Therefore we fork via [[EventExecutorGroup]] to pass system
-   * messages to the `Receptor`.
-   */
-  trace("Server initializing...")
+  def shutDownWorkers: Future[Unit] = {
+    val f1: Future[Any] = bossGrp.shutdownGracefully()
+    val f2: Future[Any] = wrkrGrp.shutdownGracefully()
 
-  server.group(bossGrp, wrkrGrp)
-    .channel(classOf[NioServerSocketChannel])
-    .childHandler(new ChannelInitializer[SocketChannel]() {
-      override def initChannel(ch: SocketChannel): Unit = {
-        val pipeline = ch.pipeline()
-        pipeline.addLast(new Logger(LogLevel.TRACE))
-        pipeline.addLast(new LengthFieldPrepender(4))
-        pipeline.addLast(new Encoder())
-        pipeline.addLast(new Decoder())
-        pipeline.addLast(new ServerHandler())
-      }
-    })
-  .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
-  .childOption(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
+    Future.sequence(Vector(f1, f2)) map (_ => ())
+  }
 
-  trace("Server initializing done.")
+  /** Initialize a Netty-based server. */
+  def initServer() = {
+    trace("Server initializing...")
+
+    try {
+      server
+        .group(bossGrp, wrkrGrp)
+        .channel(classOf[NioServerSocketChannel])
+        .childHandler(new ChannelInitializer[SocketChannel]() {
+          override def initChannel(ch: SocketChannel): Unit = {
+            val pipeline = ch.pipeline()
+            pipeline.addLast(new Logger(LogLevel.TRACE))
+            pipeline.addLast(new LengthFieldPrepender(4))
+            pipeline.addLast(new Encoder())
+            pipeline.addLast(new Decoder())
+            pipeline.addLast(new ServerHandler())
+          }
+        })
+        .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
+        .childOption(
+          ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
+        .validate()
+    } catch { case t: Throwable =>
+        error("Failure when initializing the server", t)
+        // FIXME Another approach to this blocking op?
+        Await.result(shutDownWorkers, 5.seconds)
+    }
+
+    trace("Server initializing done.")
+  }
+
+  // Init server at startup
+  initServer()
 
   /* Forward incoming messages from Netty's event loop to internal
    * message queue processed by [[Receptor]].
@@ -94,12 +111,15 @@ private[netty] trait Server extends backend.Server with SiloWarehouse
    * [[io.netty.util.ReferenceCountUtil#release(Object)]].
    */
   @ChannelHandler.Sharable
-  private class ServerHandler() extends SimpleChannelInboundHandler[Message] with Logging {
+  private class ServerHandler()
+      extends SimpleChannelInboundHandler[Message]
+      with Logging {
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: Message): Unit =
       mq add NettyWrapper(ctx, msg)
 
-    override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+    override def exceptionCaught(
+        ctx: ChannelHandlerContext, cause: Throwable): Unit = {
       //cause.printStackTrace()
 
       // XXX Don't just close the connection when an exception is raised.
@@ -115,26 +135,32 @@ private[netty] trait Server extends backend.Server with SiloWarehouse
       //if (ctx.channel().isActive())
       //  ctx.writeAndFlush(msg).addListener(CLOSE)
       //else ()
-
     }
-
   }
 
   /** Start and bind server to accept incoming connections at port `at.port` */
-  override def start(): Unit = try {
+  override def start(): Unit = {
     trace("Server start...")
+    val bound: Future[SiloSystem] = try {
+      server bind host.toAddress sync() map { _ =>
+        trace(s"Server bound to $host"); self
+      }
+    } catch {
+      case t: Throwable =>
+        error("Failure when starting the server", t)
+        stop()
+        (promiseOfStart failure t).future
+    }
 
-    executor execute receptor
-    server bind(host.port) sync()
-    started success self
-
-    trace("Server start done.")
-    info(s"Server listining at port ${host.port}.")
-
-    new Thread {
-      override def run(): Unit = latch.await()
-    }.start()
-  } catch { case e: Throwable => started failure e }
+    promiseOfStart completeWith {
+      bound map { s =>
+        executor execute receptor
+        startupLatch.await()
+        trace("Server start done.")
+        s // Return the server
+      }
+    }
+  }
 
   /** Stop server.
     *
@@ -145,14 +171,11 @@ private[netty] trait Server extends backend.Server with SiloWarehouse
     */
   override def stop(): Unit = {
     trace("Server stop...")
-
-    receptor.stop()
-    wrkrGrp.shutdownGracefully()
-    bossGrp.shutdownGracefully()
-    latch.countDown()
-
+    // Only stop receptor if it's been started
+    if(startupLatch.getCount == 0) receptor.stop()
+    // FIXME Temporary fix to startup/shutdown issues
+    bossGrp.shutdownGracefully().getNow
+    wrkrGrp.shutdownGracefully().getNow
     trace("Server stop done.")
   }
-
 }
-

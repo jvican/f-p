@@ -3,11 +3,10 @@ package backend
 package netty
 
 import com.typesafe.scalalogging.{StrictLogging => Logging}
-
 import fp.model._
 import fp.model.pickling.PicklingProtocol
-import fp.util.{UUIDGen, AsyncExecution}
-import io.netty.handler.codec.{LengthFieldBasedFrameDecoder, LengthFieldPrepender}
+import fp.util.AsyncExecution
+import io.netty.handler.codec.LengthFieldPrepender
 
 import scala.collection.mutable.{Map => Mmap}
 import scala.collection.concurrent.TrieMap
@@ -16,7 +15,6 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 import scala.pickling.{Pickler, Unpickler}
 import scala.util.{Failure, Success, Try}
-
 import io.netty.bootstrap.Bootstrap
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
@@ -34,8 +32,8 @@ class SiloSystem(implicit val ec: ExecutionContext) extends backend.SiloSystem
   import PicklingProtocol._
 
   override val systemId = SiloSystemId()
-
   override val responsesFor = new TrieMap[MsgId, Promise[Response]]
+  private val stateOf: Mmap[Host, State] = new TrieMap[Host, State]
 
   override def request[R <: ClientRequest : Pickler: Unpickler]
     (to: Host)(request: MsgId => R): Future[Response] =
@@ -48,16 +46,17 @@ class SiloSystem(implicit val ec: ExecutionContext) extends backend.SiloSystem
     }
   }
 
-  override def terminate(): Future[Unit] = {
+  override def terminate: Future[Unit] = {
     val promise = Promise[Unit]
 
     info(s"Silo system `$systemId` terminating...")
-    val closeAliveConnections = Future {
-      stateOf collect {
-        case (host, Connected(channel, worker)) =>
+    val closeAliveConnections = Future.sequence {
+      stateOf.toIterator map { t =>
+          val (host, Connected(channel, worker)) = t
           trace(s"Closing connection to `$host`.")
           sendAndForget(channel, Disconnect(MsgIdGen.next, systemId))
-            .andThen { case _ => worker.shutdownGracefully() }
+            .flatMap { _ => worker.shutdownGracefully() }
+            .recoverWith { case _ => worker.shutdownGracefully() }
             .andThen { case _ => stateOf += (host -> Disconnected) }
       }
     }
@@ -73,8 +72,6 @@ class SiloSystem(implicit val ec: ExecutionContext) extends backend.SiloSystem
 
     promise.future
   }
-
-  private val stateOf: Mmap[Host, State] = new TrieMap[Host, State]
 
   private def connect(to: Host): Future[Channel] = {
     stateOf.get(to) match {
@@ -108,16 +105,16 @@ class SiloSystem(implicit val ec: ExecutionContext) extends backend.SiloSystem
             val pipeline = ch.pipeline()
             pipeline.addLast(new Logger(LogLevel.TRACE))
             pipeline.addLast(new LengthFieldPrepender(4))
-            pipeline.addLast(new Encoder())
-            pipeline.addLast(new Decoder())
-            pipeline.addLast(new ClientHandler())
+            pipeline.addLast(new Encoder)
+            pipeline.addLast(new Decoder)
+            pipeline.addLast(new ClientHandler)
           }
         })
         .option(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
         .connect(to.address, to.port).map(Connected(_, wrkr))
     } recover {
       case t: Throwable =>
-        wrkr.shutdownGracefully()
+        wrkr.shutdownGracefully().getNow
         error("Exception caught when processing message in the pipeline", t)
         Future.successful[State](Disconnected)
     } get
@@ -127,7 +124,7 @@ class SiloSystem(implicit val ec: ExecutionContext) extends backend.SiloSystem
     * and fulfilling an existing promise in case it matches the id of any message.
     */
   @ChannelHandler.Sharable
-  private class ClientHandler() extends SimpleChannelInboundHandler[Message]
+  private class ClientHandler extends SimpleChannelInboundHandler[Message]
       with Logging {
 
     import logger._
@@ -161,8 +158,7 @@ object SiloSystem extends SiloSystemCompanion {
     */
   override def apply(port: Option[Int] = None): Future[SiloSystem] = {
     port match {
-      case Some(portNumber) =>
-        apply(Host("127.0.0.1", portNumber))
+      case Some(portNumber) => apply(Host("127.0.0.1", portNumber))
       case None => Future.successful(new SiloSystem)
     }
   }
@@ -180,15 +176,13 @@ object SiloSystem extends SiloSystemCompanion {
     */
   def apply(at: Host): Future[SiloSystem] = {
     val promise = Promise[SiloSystem]
-
     executor execute {
       new SiloSystem with Server {
         override val host = at
         override val systemId = SiloSystemId(at.toString)
-        override val started = promise
+        override val promiseOfStart = promise
       }
     }
-
     promise.future
   }
 

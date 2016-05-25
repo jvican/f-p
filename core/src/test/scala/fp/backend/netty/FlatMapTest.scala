@@ -10,7 +10,7 @@ class FlatMapTest extends ClientServerFpSpec {
 
   import PicklingProtocol._
 
-  "Flatmap" should "should work over a Silo" in { ctx =>
+  "Flatmap" should "work over a Silo" in { ctx =>
 
     implicit val c = ctx.client
 

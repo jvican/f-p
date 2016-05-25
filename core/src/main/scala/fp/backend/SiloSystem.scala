@@ -23,7 +23,7 @@ trait SiloSystem extends AsyncExecution with Logging {
   def systemId: SiloSystemId
 
   /** Terminate the silo system. */
-  def terminate(): Future[Unit]
+  def terminate: Future[Unit]
 
   def request[R <: ClientRequest: Pickler: Unpickler]
     (at: Host)(request: MsgId => R): Future[Response]

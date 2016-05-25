@@ -72,10 +72,8 @@ object TransformHandler extends Handler[Transform] {
       val newSiloRefId = SiloRefId(server.host)
       server.silos += (newSiloRefId -> newSilo)
 
-      import RuntimeHelper.getInstance
-      val (pcn, ucn) = (msg.picklerClassName, msg.unpicklerClassName)
-      val pickler = getInstance[Pickler[Transformed[Any]]](pcn)
-      val unpickler = getInstance[Unpickler[Transformed[Any]]](ucn)
+      val pickler = implicitly[Pickler[Transformed[Any]]]
+      val unpickler = implicitly[Unpickler[Transformed[Any]]]
       val response = Transformed[Any](msg.id, system.systemId, newSilo.data)
 
       reply(response, ctx)(pickler, unpickler, server)

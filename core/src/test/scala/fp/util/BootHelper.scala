@@ -1,13 +1,13 @@
 package fp.util
 
 import fp.Host
-import fp.backend.{Server, SiloSystem}
+import fp.backend.SiloSystem
 import fp.backend.netty.{SiloSystem => NettySiloSystem}
 import org.scalatest.Assertions
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 trait BootHelper {
@@ -31,7 +31,7 @@ trait BootHelper {
   def bootReadyClient = Await.result(bootClient, 10.seconds)
   def bootClient: Future[SiloSystem] = NettySiloSystem()
 
-  def shutDownSystem(sys: SiloSystem) = sys.terminate()
+  def shutDownSystem(sys: SiloSystem) = sys.terminate
   def shutDownEverything(client: SiloSystem, server: SiloSystem) = {
     shutDownSystem(client).flatMap(_ => shutDownSystem(server)).recoverWith {
       case t: Throwable => shutDownSystem(server)

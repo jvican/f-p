@@ -13,7 +13,7 @@ trait AllTestEnvironment
     with BeforeAndAfter {
   this: Suite =>
 
-  implicit val patience = PatienceConfig(100.seconds, 1.second)
+  implicit val patience = PatienceConfig(20.seconds, 1.second)
 
 }
 
