@@ -3,6 +3,8 @@ import Keys._
 
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
+import org.scoverage.coveralls.Imports.CoverallsKeys._
+import scala.util.Try
 
 object Build extends Build with Mappings {
 
@@ -20,6 +22,7 @@ object Build extends Build with Mappings {
     ),
     resolvers ++= (if (version.value.endsWith("-SNAPSHOT")) List(snapshotsRepo) else Nil),
     parallelExecution in Global := false,
+    coverallsEndpoint := Try(sys.env("COVERALLS")).recover{case _ => ""}.toOption,
     unmanagedSourceDirectories in Compile <<= (scalaSource in Compile)(Seq(_)),
     unmanagedSourceDirectories in Test <<= (scalaSource in Test)(Seq(_)),
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
